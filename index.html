@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>thynC 경영진 보고 – 병상가동률 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --accent:#2563eb; --green:#16a34a; --red:#dc2626;
+    --amber:#d97706; --purple:#7c3aed; --cyan:#0891b2;
+    --text:#0f172a; --dim:#475569; --mute:#94a3b8;
+    --border:#e2e8f0; --blight:#f1f5f9;
+    --bg:#f8fafc;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Pretendard',system-ui,-apple-system,sans-serif; padding:20px 24px; min-height:100vh; }
+
+  .header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .header-label { font-size:10px; font-weight:700; color:var(--accent); letter-spacing:2px; text-transform:uppercase; margin-bottom:2px; }
+  .header h1 { font-size:22px; font-weight:800; margin:0; }
+  .header-sub { font-size:11px; color:var(--mute); margin-top:2px; }
+
+  .type-filters { display:flex; gap:6px; }
+  .type-btn { padding:6px 14px; border-radius:8px; font-size:12px; cursor:pointer; border:1.5px solid var(--border); background:#fff; color:var(--mute); font-weight:500; transition:all .15s; }
+  .type-btn.active-total { background:#eff6ff; color:var(--accent); border-color:var(--accent); font-weight:700; }
+  .type-btn.active-legacy { background:#ecfeff; color:var(--cyan); border-color:var(--cyan); font-weight:700; }
+  .type-btn.active-tuning { background:#f5f3ff; color:var(--purple); border-color:var(--purple); font-weight:700; }
+
+  .bu-nav { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; align-items:center; }
+  .bu-label { font-size:10px; color:var(--mute); font-weight:700; }
+  .bu-btn { padding:5px 12px; border-radius:7px; font-size:12px; cursor:pointer; border:1px solid var(--border); background:#fff; color:var(--dim); font-weight:500; transition:all .15s; }
+  .bu-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+
+  .kpi-row { display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+  .kpi { background:#fff; border-radius:12px; padding:16px 20px; border:1px solid var(--border); flex:1; min-width:155px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .kpi-label { font-size:10px; font-weight:700; color:var(--mute); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:6px; }
+  .kpi-value { font-size:28px; font-weight:800; line-height:1.1; }
+  .kpi-sub { font-size:11px; color:var(--dim); margin-top:4px; }
+  .kpi-delta { font-size:11px; font-weight:700; margin-top:4px; }
+  .kpi-delta.up { color:var(--green); }
+  .kpi-delta.down { color:var(--red); }
+
+  .tabs { display:flex; gap:2px; margin-bottom:18px; border-bottom:2px solid var(--border); }
+  .tab-btn { padding:9px 18px; font-size:13px; cursor:pointer; background:transparent; border:none; border-bottom:2px solid transparent; color:var(--mute); font-weight:500; margin-bottom:-2px; transition:all .15s; }
+  .tab-btn.active { background:#fff; border-bottom-color:var(--accent); color:var(--accent); font-weight:700; }
+
+  .card { background:#fff; border-radius:12px; padding:18px; border:1px solid var(--border); box-shadow:0 1px 3px rgba(0,0,0,.04); overflow-x:auto; }
+  .card-title { font-size:14px; font-weight:700; margin-bottom:14px; }
+  .card-title-sm { font-size:13px; font-weight:700; margin-bottom:14px; }
+
+  table { width:100%; border-collapse:collapse; font-size:11px; }
+  th { padding:8px 8px; text-align:center; color:var(--mute); font-weight:600; font-size:10px; background:#f8fafc; }
+  th.left { text-align:left; padding-left:14px; }
+  td { padding:7px 8px; text-align:center; }
+  tr.row-border { border-bottom:1px solid var(--blight); }
+  tr.alt { background:#fafbfc; }
+  tr.total-row { background:#f8fafc; }
+  .td-left { text-align:left; padding-left:14px; }
+
+  .badge { display:inline-block; padding:2px 7px; border-radius:5px; font-size:10px; font-weight:800; }
+  .badge-S { color:#2563eb; background:#dbeafe; }
+  .badge-A { color:#3b82f6; background:#eff6ff; }
+  .badge-Bp { color:#334155; background:#f1f5f9; }
+  .badge-B { color:#475569; background:#f8fafc; }
+  .badge-C { color:#dc2626; background:#fef2f2; }
+
+  .rate-S { color:#2563eb; background:#dbeafe; font-weight:700; border-radius:3px; }
+  .rate-A { color:#3b82f6; background:#eff6ff; font-weight:700; border-radius:3px; }
+  .rate-Bp { color:#334155; background:#f1f5f9; font-weight:700; border-radius:3px; }
+  .rate-B { color:#475569; background:#f8fafc; font-weight:700; border-radius:3px; }
+  .rate-C { color:#dc2626; background:#fef2f2; font-weight:700; border-radius:3px; }
+
+  .tag { font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px; }
+  .tag-legacy { color:var(--cyan); background:#ecfeff; }
+  .tag-tuning { color:var(--purple); background:#f5f3ff; }
+
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid-span { grid-column:1 / -1; }
+  .flex-col { display:flex; flex-direction:column; gap:16px; }
+
+  .rank-item { display:flex; align-items:center; gap:6px; margin-bottom:5px; padding:3px 0; }
+  .rank-num { width:18px; height:18px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; flex-shrink:0; }
+  .rank-name { flex:1; font-size:11px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-bu { font-size:9px; color:var(--mute); flex-shrink:0; }
+  .rank-val { font-size:11px; font-weight:800; width:48px; text-align:right; flex-shrink:0; }
+
+  .grade-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .grade-label { width:26px; font-size:11px; font-weight:800; }
+  .grade-bar-bg { flex:1; height:12px; background:var(--blight); border-radius:3px; overflow:hidden; }
+  .grade-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
+  .grade-count { width:28px; font-size:11px; font-weight:700; color:var(--dim); text-align:right; }
+
+  .footer { margin-top:20px; padding:12px 0; border-top:1px solid var(--border); display:flex; justify-content:space-between; }
+  .footer span { font-size:10px; color:var(--mute); }
+
+  .chart-container { position:relative; width:100%; }
+  .hidden { display:none !important; }
+
+  @media (max-width:768px) {
+    .grid-2 { grid-template-columns:1fr; }
+    .kpi-row { flex-direction:column; }
+    .header { flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div class="header-label">thynC 경영진 보고</div>
+      <h1>사용량 비례형 병상가동률 대시보드</h1>
+      <div class="header-sub">26.03.30 기준 · S≥70% · A≥60% · B+≥50% · B≥40% · C&lt;40%</div>
+    </div>
+    <div class="type-filters" id="typeFilters"></div>
+  </div>
+
+  <!-- BU Nav -->
+  <div class="bu-nav" id="buNav"></div>
+
+  <!-- KPI Row -->
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs"></div>
+
+  <!-- Tab Content -->
+  <div id="tabContent"></div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>대웅제약 디지털헬스2팀 · thynC 사용량 비례형 병상가동률</span>
+    <span>데이터 기준일: 2026.03.30</span>
+  </div>
+</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────
+const MS = ["25.8","25.9","25.10","25.11","25.12","26.1","26.2","26.3"];
+const GC = {S:"#2563eb",A:"#3b82f6","B+":"#334155",B:"#475569",C:"#dc2626"};
+const GBG = {S:"#dbeafe",A:"#eff6ff","B+":"#f1f5f9",B:"#f8fafc",C:"#fef2f2"};
+
+function getGrade(v){ if(v==null)return null; if(v>=70)return"S"; if(v>=60)return"A"; if(v>=50)return"B+"; if(v>=40)return"B"; return"C"; }
+
+function calcAgg(list){
+  const wM=list.filter(x=>x.r[7]!=null), wF=list.filter(x=>x.r[6]!=null);
+  const mar=wM.length?wM.reduce((a,x)=>a+x.r[7],0)/wM.length:null;
+  const feb=wF.length?wF.reduce((a,x)=>a+x.r[6],0)/wF.length:null;
+  return{count:list.length,beds:list.reduce((a,x)=>a+x.b,0),active:wM.length,mar,feb,delta:(mar!=null&&feb!=null)?mar-feb:null};
+}
+
+const SUM = [
+  {bu:"전체",type:"기존형",ct:63,tb:8356,ac:55,ab:7462,ca:27.75,m:[14.18,29.09,25.64,33.32,29.27,32.50,35.37,29.49]},
+  {bu:"전체",type:"튜닝형",ct:70,tb:6484,ac:35,ab:3516,ca:20.07,m:[20.04,26.89,37.68,27.71,15.40,20.33,22.74,23.59]},
+  {bu:"전체",type:"합계",ct:133,tb:14840,ac:90,ab:10978,ca:24.91,m:[16.13,28.65,27.36,32.76,27.08,29.36,31.66,27.39]},
+  {bu:"서울1",type:"기존형",ct:12,tb:1830,ac:9,ab:1578,ca:19.84,m:[null,41.70,35.53,24.64,19.32,19.92,27.82,18.53]},
+  {bu:"서울1",type:"튜닝형",ct:14,tb:907,ac:7,ab:472,ca:25.54,m:[null,32.05,50.57,33.30,20.51,26.86,22.91,28.15]},
+  {bu:"서울1",type:"합계",ct:26,tb:2737,ac:16,ab:2050,ca:22.33,m:[null,36.88,43.05,27.52,19.83,22.23,25.77,22.74]},
+  {bu:"서울2",type:"기존형",ct:20,tb:2725,ac:18,ab:2353,ca:27.97,m:[null,63.55,22.56,26.94,28.33,31.38,32.63,29.43]},
+  {bu:"서울2",type:"튜닝형",ct:11,tb:1468,ac:8,ab:947,ca:21.53,m:[20.04,21.74,24.78,22.13,20.85,30.09,28.67,24.92]},
+  {bu:"서울2",type:"합계",ct:31,tb:4193,ac:26,ab:3300,ca:25.99,m:[20.04,42.64,23.12,26.14,27.80,31.18,31.84,28.04]},
+  {bu:"지방1",type:"기존형",ct:13,tb:1319,ac:12,ab:1249,ca:39.86,m:[18.97,14.60,25.96,37.38,39.37,47.79,47.21,43.51]},
+  {bu:"지방1",type:"튜닝형",ct:24,tb:2366,ac:12,ab:1306,ca:13.19,m:[null,null,null,null,0.80,11.02,15.12,15.82]},
+  {bu:"지방1",type:"합계",ct:37,tb:3685,ac:24,ab:2555,ca:26.53,m:[18.97,14.60,25.96,37.38,35.08,35.53,36.51,29.67]},
+  {bu:"지방2",type:"기존형",ct:18,tb:2482,ac:16,ab:2282,ca:22.87,m:[9.39,27.89,25.32,38.54,25.16,27.10,31.59,25.22]},
+  {bu:"지방2",type:"튜닝형",ct:17,tb:1574,ac:8,ab:791,ca:25.76,m:[null,null,null,null,9.22,19.76,28.43,32.06]},
+  {bu:"지방2",type:"합계",ct:35,tb:4056,ac:24,ab:3073,ca:23.83,m:[9.39,27.89,25.32,38.54,23.17,25.15,30.54,27.50]},
+];
+
+const HOSP = [
+{t:"기존",bu:"서울1",of:"병원강원",rp:"조현일",h:"여주새로운병원",b:40,r:[null,null,null,13.99,34.25,28.21,30.84,21.47],ca:25.75},
+{t:"기존",bu:"서울1",of:"병원강원",rp:"김한구",h:"추새로병원",b:30,r:[null,null,null,null,null,null,null,7.38],ca:7.38},
+{t:"기존",bu:"서울1",of:"병원강원",rp:"김한구",h:"성지의료재단성지병원",b:130,r:[null,null,null,null,4.88,33.04,44.06,27.4],ca:27.34},
+{t:"기존",bu:"서울1",of:"병원강원",rp:"조현일",h:"대성병원",b:100,r:[null,null,null,null,null,5.7,37.63,37.24],ca:26.86},
+{t:"기존",bu:"서울1",of:"병원강원",rp:"조현일",h:"원주센텀병원",b:30,r:[null,null,null,null,null,9.17,18.69,11.47],ca:13.11},
+{t:"기존",bu:"서울1",of:"병원강원",rp:"조현일",h:"원주 정병원",b:30,r:[null,null,null,null,null,null,null,6.58],ca:6.58},
+{t:"기존",bu:"서울1",of:"병원경인",rp:"김두성",h:"검단탑종합병원",b:280,r:[null,41.7,35.53,35.28,21.63,23.31,15.05,17.41],ca:27.13},
+{t:"기존",bu:"서울1",of:"병원경인",rp:"이효준",h:"김포우리병원",b:469,r:[null,null,null,null,16.53,20.06,17.43,14.02],ca:17.01},
+{t:"기존",bu:"서울1",of:"병원서울2",rp:"황진하",h:"분당제생병원",b:469,r:[null,null,null,null,null,null,31.01,23.78],ca:27.4},
+{t:"기존",bu:"서울2",of:"병원경기2",rp:"이창민",h:"평택성모병원",b:359,r:[null,null,null,null,null,null,null,27.56],ca:27.56},
+{t:"기존",bu:"서울2",of:"병원경기2",rp:"이창민",h:"센트럴병원",b:259,r:[null,null,null,null,null,5.39,2.42,34.93],ca:14.24},
+{t:"기존",bu:"서울2",of:"병원경기2",rp:"김남진",h:"동탄시티병원",b:90,r:[null,null,null,4.26,16.93,31.85,28.96,20.15],ca:20.43},
+{t:"기존",bu:"서울2",of:"병원경기2",rp:"이창민",h:"안중백병원",b:60,r:[null,null,null,null,29.21,42.92,55.1,50.02],ca:44.31},
+{t:"기존",bu:"서울2",of:"병원남부1",rp:"임효섭",h:"씨엠병원",b:105,r:[null,null,null,null,7.42,21.41,30.92,16.49],ca:19.06},
+{t:"기존",bu:"서울2",of:"병원남부1",rp:"이정환",h:"사랑플러스병원",b:40,r:[null,null,null,null,10.42,32.44,54.56,49.11],ca:36.63},
+{t:"기존",bu:"서울2",of:"병원남부1",rp:"이광현",h:"장튼위튼병원",b:30,r:[null,null,null,null,null,null,null,10.42],ca:10.42},
+{t:"기존",bu:"서울2",of:"병원동부",rp:"이철민",h:"한양의료재단",b:120,r:[null,null,null,null,44.53,27.93,25.12,27.96],ca:31.38},
+{t:"기존",bu:"서울2",of:"병원동부",rp:"이선구",h:"양주예쓰병원",b:100,r:[null,null,null,null,null,10.42,10.42,10.42],ca:10.42},
+{t:"기존",bu:"서울2",of:"병원동부",rp:"김형섭",h:"서울성심병원",b:80,r:[null,null,null,null,20.21,32.71,25.87,14.16],ca:23.24},
+{t:"기존",bu:"서울2",of:"병원동부",rp:"김태인",h:"남양주21세기병원",b:29,r:[null,null,8.3,10.42,10.42,15.63,10.42,14.48],ca:11.61},
+{t:"기존",bu:"서울2",of:"병원북부",rp:"이삭",h:"추병원",b:171,r:[null,63.55,56.03,48.57,48.86,57.31,47.25,45.38],ca:52.42},
+{t:"기존",bu:"서울2",of:"병원북부",rp:"문치호",h:"서울노보스병원",b:130,r:[null,null,null,null,null,6.63,24.49,15.58],ca:15.57},
+{t:"기존",bu:"서울2",of:"병원북부",rp:"최동식",h:"의정부백병원",b:100,r:[null,null,null,14.65,14.11,21.23,23.45,22.61],ca:19.21},
+{t:"기존",bu:"서울2",of:"병원북부",rp:"이영준",h:"신일병원",b:50,r:[null,null,null,null,24.85,44.64,54.59,40.94],ca:41.25},
+{t:"기존",bu:"서울2",of:"병원중부1",rp:"이기범",h:"메디인병원",b:30,r:[null,null,null,null,69.47,65.94,48.12,55.39],ca:59.73},
+{t:"기존",bu:"서울2",of:"제주",rp:"홍창범",h:"제주한라병원",b:500,r:[null,null,null,null,10.94,12.93,13.65,10.04],ca:11.89},
+{t:"기존",bu:"서울2",of:"제주",rp:"홍창범",h:"한국병원(제주)",b:100,r:[null,null,3.36,56.8,60.92,72.73,66.81,64.14],ca:54.13},
+{t:"기존",bu:"지방1",of:"병원대구1",rp:"오성훈",h:"바로본병원",b:50,r:[null,null,null,61.89,68.07,77.76,73.16,67.58],ca:69.69},
+{t:"기존",bu:"지방1",of:"병원대구1",rp:"오성훈",h:"수성한미병원",b:30,r:[null,null,null,null,11.58,29.24,41.61,29.66],ca:28.02},
+{t:"기존",bu:"지방1",of:"병원대구2",rp:"김혜원",h:"좋은선린병원",b:120,r:[null,null,null,null,23.35,51.08,37.69,36.28],ca:37.1},
+{t:"기존",bu:"지방1",of:"병원대구2",rp:"양기호",h:"에스포항병원",b:120,r:[null,null,null,null,null,null,46.51,49.91],ca:48.21},
+{t:"기존",bu:"지방1",of:"병원대구2",rp:"이지홍",h:"새천년병원(경주)",b:40,r:[null,null,null,null,null,37.68,37.21,33.67],ca:36.18},
+{t:"기존",bu:"지방1",of:"병원부산1",rp:"김주영",h:"온종합병원",b:39,r:[null,null,null,6.3,null,49.48,74.13,67.77],ca:49.42},
+{t:"기존",bu:"지방1",of:"병원부산1",rp:"박큰솔",h:"서울산보람병원",b:30,r:[null,null,null,5.52,43.03,37.06,38.71,37.2],ca:32.31},
+{t:"기존",bu:"지방1",of:"병원부산2",rp:"김두환",h:"동의병원",b:300,r:[null,null,null,null,null,null,6.58,10.42],ca:8.5},
+{t:"기존",bu:"지방1",of:"병원부산2",rp:"임지훈",h:"BHS한서병원",b:250,r:[null,1.88,10.42,10.42,15.44,28.32,34.81,38.4],ca:19.95},
+{t:"기존",bu:"지방1",of:"병원부산2",rp:"황지현",h:"세웅종합병원",b:100,r:[null,19.44,null,76.08,47.67,65.73,65.75,59.54],ca:55.7},
+{t:"기존",bu:"지방1",of:"병원부산2",rp:"임지훈",h:"빌리브세웅병원",b:140,r:[18.97,22.49,21.86,24.24,32.97,34.83,49.4,36.02],ca:30.1},
+{t:"기존",bu:"지방1",of:"병원부산2",rp:"임지훈",h:"부산본병원",b:30,r:[null,null,45.6,77.24,72.85,66.78,60.91,55.69],ca:63.18},
+{t:"기존",bu:"지방2",of:"병원광주1",rp:"조현준",h:"화순성심병원",b:150,r:[null,null,35.26,44.69,39.57,54.48,51.3,41.45],ca:44.46},
+{t:"기존",bu:"지방2",of:"병원광주1",rp:"이용선",h:"녹동현대병원",b:100,r:[null,null,null,null,null,null,null,2.65],ca:2.65},
+{t:"기존",bu:"지방2",of:"병원광주1",rp:"이용선",h:"고흥윤호21병원",b:70,r:[null,null,null,null,null,30.63,34.63,21.42],ca:28.89},
+{t:"기존",bu:"지방2",of:"병원광주1",rp:"김탄",h:"KS병원",b:30,r:[null,null,null,null,null,null,9.4,40.24],ca:24.82},
+{t:"기존",bu:"지방2",of:"병원광주2",rp:"정두리",h:"목포기독병원",b:280,r:[null,null,0.24,null,2.08,10.42,12.15,19.63],ca:8.9},
+{t:"기존",bu:"지방2",of:"병원대전",rp:"정지현",h:"서산중앙병원",b:288,r:[null,null,null,null,null,0.65,10.42,23.14],ca:11.4},
+{t:"기존",bu:"지방2",of:"병원대전",rp:"임혁",h:"대전한국병원",b:253,r:[null,2.12,10.42,12.94,19.96,22.55,21.93,15.54],ca:15.07},
+{t:"기존",bu:"지방2",of:"병원대전",rp:"정지우",h:"당진종합병원",b:160,r:[null,null,null,null,10.02,18.08,17.91,10.7],ca:14.18},
+{t:"기존",bu:"지방2",of:"병원대전",rp:"김종현",h:"대청병원",b:120,r:[null,null,null,null,null,26.86,73.19,67.97],ca:56.01},
+{t:"기존",bu:"지방2",of:"병원대전",rp:"임혁",h:"예산명지병원",b:100,r:[9.39,42.94,33.9,41.68,48.68,44.68,32.57,21.41],ca:34.4},
+{t:"기존",bu:"지방2",of:"병원대전",rp:"정지우",h:"건양대부여병원",b:40,r:[null,null,null,null,null,16.25,25.59,17.06],ca:19.64},
+{t:"기존",bu:"지방2",of:"병원전주",rp:"하완석",h:"원광대학교병원",b:255,r:[null,null,null,null,null,null,null,10.42],ca:10.42},
+{t:"기존",bu:"지방2",of:"병원청주",rp:"차재형",h:"아산충무병원",b:274,r:[null,null,null,null,null,null,null,7.2],ca:7.2},
+{t:"기존",bu:"지방2",of:"병원청주",rp:"이진구",h:"현대병원(아산)",b:84,r:[null,null,null,null,6.57,17.49,39.07,44.05],ca:26.79},
+{t:"기존",bu:"지방2",of:"병원청주",rp:"박지우",h:"천안리턴병원",b:48,r:[null,38.6,46.77,54.85,49.25,56.08,50.95,48.91],ca:49.34},
+{t:"기존",bu:"지방2",of:"병원청주",rp:"황수경",h:"제천성지병원",b:30,r:[null,null,null,null,null,null,null,11.69],ca:11.69},
+{t:"튜닝",bu:"서울1",of:"병원경인",rp:"국경호",h:"다니엘병원",b:52,r:[null,null,null,null,null,null,null,55.71],ca:55.71},
+{t:"튜닝",bu:"서울1",of:"병원서울1",rp:"김태완",h:"하남S병원",b:30,r:[null,null,null,null,null,null,13.78,25.22],ca:19.5},
+{t:"튜닝",bu:"서울1",of:"병원서울3",rp:"노성우",h:"신촌연세병원",b:72,r:[null,null,null,null,10.2,20.65,20.01,20.21],ca:17.77},
+{t:"튜닝",bu:"서울1",of:"병원서울3",rp:"왕유찬",h:"해븐리병원",b:117,r:[null,null,null,null,4.79,12.59,17.01,15.67],ca:12.52},
+{t:"튜닝",bu:"서울1",of:"병원서울4",rp:"최성철",h:"중앙대광명병원",b:12,r:[null,32.05,50.57,33.3,46.53,47.34,48.09,54.69],ca:44.65},
+{t:"튜닝",bu:"서울1",of:"병원인천",rp:"김형태",h:"국제성모병원",b:137,r:[null,null,null,null,null,null,null,16.11],ca:16.11},
+{t:"튜닝",bu:"서울1",of:"병원인천",rp:"나천",h:"부평세림병원",b:52,r:[null,null,null,null,null,null,15.67,9.43],ca:12.55},
+{t:"튜닝",bu:"서울2",of:"병원경기1",rp:"장철희",h:"화홍병원",b:191,r:[null,null,null,null,null,36.53,34.91,28.03],ca:33.16},
+{t:"튜닝",bu:"서울2",of:"병원경기1",rp:"장철희",h:"한도병원",b:100,r:[null,null,null,null,null,null,null,16.47],ca:16.47},
+{t:"튜닝",bu:"서울2",of:"병원동부",rp:"김태인",h:"엘병원",b:100,r:[null,null,null,null,null,null,null,22.3],ca:22.3},
+{t:"튜닝",bu:"서울2",of:"병원동부",rp:"김형섭",h:"청구성심병원",b:196,r:[null,null,null,null,null,32.11,43.13,37.41],ca:37.55},
+{t:"튜닝",bu:"서울2",of:"병원동부",rp:"임창희",h:"서울에이스병원",b:70,r:[null,null,null,null,null,null,null,16.27],ca:16.27},
+{t:"튜닝",bu:"서울2",of:"병원중부1",rp:"배중환",h:"서울대병원(임상)",b:30,r:[null,null,null,null,null,null,null,16.96],ca:16.96},
+{t:"튜닝",bu:"서울2",of:"병원중부1",rp:"이기범",h:"문산중앙병원",b:48,r:[20.04,21.74,24.78,22.13,20.85,21.63,35.62,60.67],ca:28.43},
+{t:"튜닝",bu:"서울2",of:"병원중부2",rp:"김경열",h:"명지성모병원",b:212,r:[null,null,null,null,null,null,1.0,1.24],ca:1.12},
+{t:"튜닝",bu:"지방1",of:"병원경남1",rp:"손준혁",h:"김해복음병원",b:200,r:[null,null,null,null,0.8,21.53,27.44,28.34],ca:19.53},
+{t:"튜닝",bu:"지방1",of:"병원경남1",rp:"임채환",h:"새통영병원",b:104,r:[null,null,null,null,null,4.01,2.07,12.39],ca:6.16},
+{t:"튜닝",bu:"지방1",of:"병원경남1",rp:"정성훈",h:"연세에스병원",b:40,r:[null,null,null,null,null,null,5.0,11.67],ca:8.33},
+{t:"튜닝",bu:"지방1",of:"병원경남1",rp:"허재원",h:"김해굿모닝병원",b:60,r:[null,null,null,null,null,4.94,4.0,4.39],ca:4.44},
+{t:"튜닝",bu:"지방1",of:"병원대구1",rp:"권근륜",h:"안동복주회복병원",b:210,r:[null,null,null,null,null,null,null,3.42],ca:3.42},
+{t:"튜닝",bu:"지방1",of:"병원대구2",rp:"김주형",h:"더필병원",b:60,r:[null,null,null,null,null,null,null,42.11],ca:42.11},
+{t:"튜닝",bu:"지방1",of:"병원부산1",rp:"이승헌",h:"나눔과행복병원",b:110,r:[null,null,null,null,null,null,null,16.94],ca:16.94},
+{t:"튜닝",bu:"지방1",of:"병원부산1",rp:"정원종",h:"부산센텀병원",b:177,r:[null,null,null,null,null,null,null,0.8],ca:0.8},
+{t:"튜닝",bu:"지방1",of:"병원부산2",rp:"전경진",h:"울산병원",b:112,r:[null,null,null,null,null,21.88,26.19,23.27],ca:23.78},
+{t:"튜닝",bu:"지방1",of:"병원부산3",rp:"김수민",h:"거인병원",b:70,r:[null,null,null,null,null,null,null,0.48],ca:0.48},
+{t:"튜닝",bu:"지방1",of:"병원부산3",rp:"박규태",h:"한빛병원",b:99,r:[null,null,null,null,null,2.71,26.02,35.1],ca:21.27},
+{t:"튜닝",bu:"지방1",of:"병원부산3",rp:"박규태",h:"해동병원",b:64,r:[null,null,null,null,null,null,null,10.99],ca:10.99},
+{t:"튜닝",bu:"지방2",of:"병원광주1",rp:"김정란",h:"해남우리병원",b:50,r:[null,null,null,null,null,null,null,29.16],ca:29.16},
+{t:"튜닝",bu:"지방2",of:"병원광주2",rp:"박경환",h:"목포중앙병원",b:264,r:[null,null,null,null,null,2.32,15.23,11.34],ca:9.63},
+{t:"튜닝",bu:"지방2",of:"병원광주2",rp:"주병옥",h:"동아병원",b:39,r:[null,null,null,null,null,28.61,43.38,55.41],ca:42.46},
+{t:"튜닝",bu:"지방2",of:"병원광주2",rp:"최송이",h:"운암한국병원",b:125,r:[null,null,null,null,null,null,8.85,35.36],ca:22.11},
+{t:"튜닝",bu:"지방2",of:"병원광주2",rp:"최송이",h:"광주한국병원",b:115,r:[null,null,null,null,null,null,28.96,45.62],ca:37.29},
+{t:"튜닝",bu:"지방2",of:"병원광주2",rp:"최송이",h:"광주시원병원",b:30,r:[null,null,null,null,9.22,35.11,22.33,31.89],ca:24.64},
+{t:"튜닝",bu:"지방2",of:"병원전주",rp:"박지산",h:"전주고려병원",b:40,r:[null,null,null,null,null,null,null,4.89],ca:4.89},
+{t:"튜닝",bu:"지방2",of:"병원청주",rp:"이헌찬",h:"뿌리병원",b:49,r:[null,null,null,null,null,12.99,51.85,42.78],ca:35.87},
+];
+
+// ─── STATE ──────────────────────────────────────────
+let selBU = "전체", tf = "합계", tab = "overview";
+let charts = {};
+
+// ─── HELPERS ────────────────────────────────────────
+function gradeClass(g){ return g ? ('badge-'+(g==='B+'?'Bp':g)) : ''; }
+function rateClass(g){ return g ? ('rate-'+(g==='B+'?'Bp':g)) : ''; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function rateCell(v){
+  if(v==null) return `<td style="padding:4px 5px;text-align:center;color:var(--mute);font-size:10px">-</td>`;
+  const g=getGrade(v);
+  return `<td class="${rateClass(g)}" style="padding:4px 5px;text-align:center;font-size:10px">${v.toFixed(1)}</td>`;
+}
+
+function badgeHtml(g){
+  if(!g) return `<span style="color:var(--mute);font-size:10px">-</span>`;
+  return `<span class="badge ${gradeClass(g)}">${g}</span>`;
+}
+
+function getFiltered(){
+  let l = HOSP;
+  if(selBU!=="전체") l=l.filter(x=>x.bu===selBU);
+  if(tf==="기존형") l=l.filter(x=>x.t==="기존");
+  else if(tf==="튜닝형") l=l.filter(x=>x.t==="튜닝");
+  return l;
+}
+
+function destroyCharts(){ Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}}); charts={}; }
+
+// ─── RENDER FUNCTIONS ───────────────────────────────
+function renderTypeFilters(){
+  const el=document.getElementById('typeFilters');
+  const types=[{k:"합계",label:"기존+튜닝"},{k:"기존형",label:"기존형"},{k:"튜닝형",label:"튜닝형"}];
+  el.innerHTML=types.map(t=>{
+    const cls = tf===t.k ? (t.k==="기존형"?"active-legacy":t.k==="튜닝형"?"active-tuning":"active-total") : "";
+    return `<button class="type-btn ${cls}" data-tf="${t.k}">${t.label}</button>`;
+  }).join('');
+  el.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ tf=b.dataset.tf; render(); }));
+}
+
+function renderBuNav(){
+  const el=document.getElementById('buNav');
+  const bus=["전체","서울1","서울2","지방1","지방2"];
+  el.innerHTML=`<span class="bu-label">사업부</span>`+bus.map(b=>
+    `<button class="bu-btn ${selBU===b?'active':''}" data-bu="${b}">${b}</button>`
+  ).join('');
+  el.querySelectorAll('.bu-btn').forEach(b=>b.addEventListener('click',()=>{ selBU=b.dataset.bu; render(); }));
+}
+
+function renderKpis(){
+  const filtered=getFiltered();
+  const a=calcAgg(filtered);
+  const s=SUM.find(x=>x.bu===(selBU!=="전체"?selBU:"전체")&&x.type===tf)||SUM.find(x=>x.bu==="전체"&&x.type==="합계");
+  const kpi={...a,contracts:s?s.ct:a.count,totalBeds:s?s.tb:a.beds,cumAvg:s?s.ca:0};
+  const titleLabel=selBU!=="전체"?selBU:"전체";
+
+  const marColor = kpi.mar>=40?'var(--green)':kpi.mar>=25?'var(--amber)':'var(--red)';
+  const deltaHtml = kpi.delta!=null
+    ? `<div class="kpi-delta ${kpi.delta>=0?'up':'down'}">${kpi.delta>=0?"▲":"▼"} ${Math.abs(kpi.delta).toFixed(1)}%p vs 2월</div>`
+    : '';
+
+  document.getElementById('kpiRow').innerHTML=`
+    <div class="kpi">
+      <div class="kpi-label">3월 가동률</div>
+      <div class="kpi-value" style="color:${marColor}">${kpi.mar!=null?kpi.mar.toFixed(1)+"%":"-"}</div>
+      ${deltaHtml}
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">계약 처수</div>
+      <div class="kpi-value">${kpi.contracts}</div>
+      <div class="kpi-sub">가동 ${kpi.active}개 처</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">누계 병상수</div>
+      <div class="kpi-value">${kpi.totalBeds.toLocaleString()}</div>
+      <div class="kpi-sub">가동 ${kpi.beds.toLocaleString()} 병상</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">누적 평균</div>
+      <div class="kpi-value" style="color:var(--amber)">${kpi.cumAvg.toFixed(1)}%</div>
+      <div class="kpi-sub">${titleLabel} · ${tf}</div>
+    </div>
+  `;
+}
+
+function renderTabs(){
+  const el=document.getElementById('tabs');
+  const tabs=[["overview","종합 현황"],["trend","월별 추이"],["hospitals","거래처 상세"]];
+  el.innerHTML=tabs.map(([k,l])=>
+    `<button class="tab-btn ${tab===k?'active':''}" data-tab="${k}">${l}</button>`
+  ).join('');
+  el.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{ tab=b.dataset.tab; renderContent(); renderTabs(); }));
+}
+
+function renderContent(){
+  destroyCharts();
+  const el=document.getElementById('tabContent');
+  if(tab==="overview") renderOverview(el);
+  else if(tab==="trend") renderTrend(el);
+  else renderHospitals(el);
+}
+
+// ─── OVERVIEW TAB ───────────────────────────────────
+function renderOverview(el){
+  const filtered=getFiltered();
+  const titleLabel=selBU!=="전체"?selBU:"전체";
+
+  // SubTable data
+  let subTableHtml='';
+  if(selBU==="전체"){
+    const bus=["서울1","서울2","지방1","지방2"];
+    const rows=bus.map(bu=>{
+      let l=HOSP.filter(x=>x.bu===bu);
+      if(tf==="기존형") l=l.filter(x=>x.t==="기존");
+      else if(tf==="튜닝형") l=l.filter(x=>x.t==="튜닝");
+      if(!l.length) return null;
+      return {label:bu,...calcAgg(l)};
+    }).filter(Boolean);
+    subTableHtml=buildSubTable(`사업부별 현황 (${titleLabel} · ${tf})`,rows,"bu");
+  } else {
+    let l=HOSP.filter(x=>x.bu===selBU);
+    if(tf==="기존형") l=l.filter(x=>x.t==="기존");
+    else if(tf==="튜닝형") l=l.filter(x=>x.t==="튜닝");
+    const offices=[...new Set(l.map(x=>x.of))].sort();
+    const rows=offices.map(of=>({label:of,...calcAgg(l.filter(x=>x.of===of))}));
+    subTableHtml=buildSubTable(`사무소별 현황 (${selBU} · ${tf})`,rows,"of");
+  }
+
+  // Grade dist
+  const gCounts={S:0,A:0,"B+":0,B:0,C:0};
+  filtered.forEach(x=>{ const g=getGrade(x.r[7]); if(g) gCounts[g]++; });
+  const totalG=Object.values(gCounts).reduce((a,b)=>a+b,0);
+
+  // Top/Bottom
+  const withMar=filtered.filter(x=>x.r[7]!=null).sort((a,b)=>b.r[7]-a.r[7]);
+  const top10=withMar.slice(0,10), bot10=withMar.slice(-10).reverse();
+
+  // BU comparison
+  let buCmpHtml='';
+  if(selBU==="전체"){
+    buCmpHtml=`<div class="card"><div class="card-title-sm">사업부별 2월 vs 3월</div><div class="chart-container"><canvas id="chartBuCmp" height="220"></canvas></div></div>`;
+  }
+
+  el.innerHTML=`
+    <div class="flex-col">
+      ${subTableHtml}
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title-sm">월별 가동률 추이 (${titleLabel})</div>
+          <div class="chart-container"><canvas id="chartTrendMini" height="220"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title-sm">3월 등급 분포 (${filtered.filter(x=>x.r[7]!=null).length}개 처)</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:45%"><canvas id="chartPie" height="200"></canvas></div>
+            <div style="flex:1">
+              ${["S","A","B+","B","C"].map(g=>{
+                const cnt=gCounts[g]||0;
+                const pct=totalG?(cnt/totalG*100):0;
+                return `<div class="grade-row">
+                  <span class="grade-label" style="color:${GC[g]}">${g}</span>
+                  <div class="grade-bar-bg"><div class="grade-bar-fill" style="width:${pct}%;background:${GC[g]}"></div></div>
+                  <span class="grade-count">${cnt}</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+        ${buCmpHtml}
+        <div class="card ${selBU!=='전체'?'grid-span':''}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div>
+              <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--green)">▲ Top 10 (3월)</div>
+              ${top10.map((x,i)=>rankItemHtml(x,i,true)).join('')}
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--red)">▼ Bottom 10 (3월)</div>
+              ${bot10.map((x,i)=>rankItemHtml(x,i,false)).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Charts
+  buildTrendChart('chartTrendMini',220,true);
+  buildPieChart('chartPie',gCounts);
+  if(selBU==="전체") buildBuCmpChart('chartBuCmp');
+}
+
+function buildSubTable(title,rows,labelKey){
+  return `<div class="card">
+    <div style="padding:0 0 10px;font-size:13px;font-weight:700;border-bottom:1px solid var(--blight)">${title}</div>
+    <table>
+      <thead><tr>
+        <th class="left" style="font-size:10px">${labelKey==="bu"?"사업부":"사무소"}</th>
+        <th style="font-size:10px">처수</th><th style="font-size:10px">병상</th><th style="font-size:10px">가동</th>
+        <th style="font-size:10px">3월</th><th style="font-size:10px">2월</th><th style="font-size:10px">변동</th><th style="font-size:10px">등급</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(row=>{
+          const g=getGrade(row.mar);
+          const deltaColor=row.delta!=null?(row.delta>=0?'var(--green)':'var(--red)'):'var(--mute)';
+          const deltaText=row.delta!=null?((row.delta>=0?"+":"")+row.delta.toFixed(1)):"-";
+          return `<tr class="row-border">
+            <td class="td-left" style="font-weight:600;font-size:12px">${esc(row.label)}</td>
+            <td style="color:var(--dim)">${row.count}</td>
+            <td style="color:var(--dim)">${row.beds.toLocaleString()}</td>
+            <td style="color:var(--dim)">${row.active}</td>
+            <td class="${rateClass(g)}" style="border-radius:4px">${row.mar!=null?row.mar.toFixed(1)+"%":"-"}</td>
+            <td style="color:var(--dim)">${row.feb!=null?row.feb.toFixed(1)+"%":"-"}</td>
+            <td style="font-weight:700;color:${deltaColor}">${deltaText}</td>
+            <td>${badgeHtml(g)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function rankItemHtml(x,i,isTop){
+  const color=isTop?'var(--green)':'var(--red)';
+  const bg=isTop?(i<3?'#dcfce7':'#f1f5f9'):'#fef2f2';
+  const numColor=isTop?(i<3?'var(--green)':'var(--mute)'):'var(--red)';
+  const tagCls=x.t==="기존"?"tag-legacy":"tag-tuning";
+  return `<div class="rank-item">
+    <span class="rank-num" style="background:${bg};color:${numColor}">${i+1}</span>
+    <span class="rank-name">${esc(x.h)}</span>
+    <span class="rank-bu">${esc(x.bu)}</span>
+    <span class="tag ${tagCls}">${esc(x.t)}</span>
+    <span class="rank-val" style="color:${color}">${x.r[7]!=null?x.r[7].toFixed(1)+"%":"-"}</span>
+    ${badgeHtml(getGrade(x.r[7]))}
+  </div>`;
+}
+
+// ─── TREND TAB ──────────────────────────────────────
+function renderTrend(el){
+  const titleLabel=selBU!=="전체"?selBU:"전체";
+  const filtered=getFiltered();
+  const sorted=[...filtered].sort((a,b)=>(b.r[7]!=null?b.r[7]:-1)-(a.r[7]!=null?a.r[7]:-1));
+
+  // Monthly BU table
+  const buTableRows=SUM.filter(s=>s.type==="합계").map((s,i)=>{
+    const isTot=s.bu==="전체";
+    return `<tr class="row-border ${isTot?'total-row':''}">
+      <td class="td-left" style="font-weight:${isTot?700:500}">${s.bu}</td>
+      <td style="color:var(--dim);font-size:10px">${s.ct}</td>
+      <td style="color:var(--dim);font-size:10px">${s.tb.toLocaleString()}</td>
+      ${s.m.map(v=>rateCell(v)).join('')}
+      <td style="font-weight:700;color:var(--amber);font-size:11px">${s.ca.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML=`
+    <div class="flex-col">
+      <div class="card" style="padding:20px">
+        <div class="card-title">월별 가동률 추이 (${titleLabel})</div>
+        <div class="chart-container"><canvas id="chartTrendFull" height="300"></canvas></div>
+      </div>
+      <div class="card" style="padding:20px">
+        <div class="card-title">사업부별 월별 가동률 (기존+튜닝)</div>
+        <table>
+          <thead><tr>
+            <th class="left" style="font-size:10px">사업부</th>
+            <th style="font-size:10px">처수</th><th style="font-size:10px">병상</th>
+            ${MS.map(m=>`<th style="font-size:9px">${m}</th>`).join('')}
+            <th style="color:var(--amber);font-weight:700;font-size:10px">누적</th>
+          </tr></thead>
+          <tbody>${buTableRows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  buildTrendChart('chartTrendFull',300,false);
+}
+
+// ─── HOSPITALS TAB ──────────────────────────────────
+function renderHospitals(el){
+  const filtered=getFiltered();
+  const sorted=[...filtered].sort((a,b)=>(b.r[7]!=null?b.r[7]:-1)-(a.r[7]!=null?a.r[7]:-1));
+  const titleLabel=selBU!=="전체"?selBU:"전체";
+
+  el.innerHTML=`
+    <div class="card">
+      <div class="card-title">거래처별 상세
+        <span style="font-size:12px;color:var(--mute);font-weight:400;margin-left:8px">(${sorted.length}개 · ${titleLabel} · ${tf})</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th style="font-size:9px">#</th>
+          <th class="left" style="font-size:9px">유형</th>
+          <th class="left" style="font-size:9px">사업부</th>
+          <th class="left" style="font-size:9px">사무소</th>
+          <th class="left" style="font-size:9px">담당자</th>
+          <th class="left" style="font-size:9px;min-width:100px">병원명</th>
+          <th style="font-size:9px;text-align:right">병상</th>
+          ${MS.map(m=>`<th style="font-size:8px;min-width:44px">${m}</th>`).join('')}
+          <th style="color:var(--amber);font-weight:700;font-size:9px">누적</th>
+          <th style="font-size:9px">등급</th>
+        </tr></thead>
+        <tbody>
+          ${sorted.map((x,i)=>{
+            const tagCls=x.t==="기존"?"tag-legacy":"tag-tuning";
+            return `<tr class="row-border ${i%2?'alt':''}">
+              <td style="color:var(--mute);font-size:9px">${i+1}</td>
+              <td style="text-align:left"><span class="tag ${tagCls}">${x.t}</span></td>
+              <td style="text-align:left;font-size:10px;color:var(--dim)">${esc(x.bu)}</td>
+              <td style="text-align:left;font-size:10px;color:var(--dim)">${esc(x.of)}</td>
+              <td style="text-align:left;font-size:10px;color:var(--dim)">${esc(x.rp)}</td>
+              <td style="text-align:left;font-size:11px;font-weight:500;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.h)}</td>
+              <td style="text-align:right;color:var(--dim);font-size:10px">${x.b}</td>
+              ${x.r.map(v=>rateCell(v)).join('')}
+              <td style="font-weight:700;color:var(--amber);font-size:11px">${x.ca!=null?x.ca.toFixed(1)+"%":"-"}</td>
+              <td>${badgeHtml(getGrade(x.ca))}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ─── CHART BUILDERS ─────────────────────────────────
+function buildTrendChart(canvasId, height, mini){
+  const bu=selBU!=="전체"?selBU:"전체";
+  const labels=MS;
+  const datasets=[];
+
+  ["합계","기존형","튜닝형"].forEach(type=>{
+    const s=SUM.find(x=>x.bu===bu&&x.type===type);
+    if(!s) return;
+    const color=type==="합계"?"#2563eb":type==="기존형"?"#0891b2":"#7c3aed";
+    const isMain=type===tf;
+    const show=tf==="합계"||(type===tf);
+    datasets.push({
+      label:type,
+      data:s.m.map(v=>v),
+      borderColor:color,
+      backgroundColor:color+'22',
+      borderWidth: tf==="합계"?(type==="합계"?3:1.5):(isMain?3:0),
+      borderDash: tf==="합계"&&type!=="합계"?[5,3]:[],
+      pointRadius: (tf==="합계"&&type==="합계")||isMain?4:0,
+      pointBackgroundColor:color,
+      tension:0.3,
+      spanGaps:true,
+      hidden:!show&&tf!=="합계",
+    });
+  });
+
+  const ctx=document.getElementById(canvasId);
+  if(!ctx) return;
+  charts[canvasId]=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{font:{size:11},usePointStyle:true,pointStyle:'circle'}},
+        tooltip:{
+          backgroundColor:'#0f172a',titleColor:'#94a3b8',bodyColor:'#f1f5f9',
+          borderColor:'#334155',borderWidth:1,cornerRadius:10,
+          callbacks:{label:ctx=>ctx.parsed.y!=null?ctx.dataset.label+': '+ctx.parsed.y.toFixed(1)+'%':ctx.dataset.label+': -'}
+        },
+      },
+      scales:{
+        y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',callback:v=>v+'%'},
+          grid:{color:'#e2e8f0'}},
+        x:{ticks:{font:{size:mini?10:11},color:'#475569'},grid:{display:false}}
+      },
+      animation:{duration:400}
+    }
+  });
+}
+
+function buildPieChart(canvasId,gCounts){
+  const grades=["S","A","B+","B","C"];
+  const data=grades.map(g=>gCounts[g]||0);
+  const colors=grades.map(g=>GC[g]);
+  const ctx=document.getElementById(canvasId);
+  if(!ctx) return;
+  charts[canvasId]=new Chart(ctx,{
+    type:'doughnut',
+    data:{labels:grades,datasets:[{data,backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},
+    options:{
+      responsive:true,
+      cutout:'55%',
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#0f172a',titleColor:'#94a3b8',bodyColor:'#f1f5f9',
+          borderColor:'#334155',borderWidth:1,cornerRadius:10,
+        }
+      },
+      animation:{duration:400}
+    }
+  });
+}
+
+function buildBuCmpChart(canvasId){
+  const bus=["서울1","서울2","지방1","지방2"];
+  const data=bus.map(bu=>{
+    const s=SUM.find(x=>x.bu===bu&&x.type===tf);
+    if(!s) return{bu,feb:0,mar:0};
+    return{bu,feb:s.m[6],mar:s.m[7]};
+  });
+
+  const ctx=document.getElementById(canvasId);
+  if(!ctx) return;
+  charts[canvasId]=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:bus,
+      datasets:[
+        {label:'2월',data:data.map(d=>d.feb),backgroundColor:'#cbd5e1',borderRadius:4,barPercentage:0.5},
+        {label:'3월',data:data.map(d=>d.mar),
+          backgroundColor:data.map(d=>d.mar>=d.feb?'#16a34a':'#dc2626'),borderRadius:4,barPercentage:0.5}
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{font:{size:11},usePointStyle:true,pointStyle:'circle'}},
+        tooltip:{
+          backgroundColor:'#0f172a',titleColor:'#94a3b8',bodyColor:'#f1f5f9',
+          borderColor:'#334155',borderWidth:1,cornerRadius:10,
+          callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.parsed.y!=null?ctx.parsed.y.toFixed(1):0)+'%'}
+        }
+      },
+      scales:{
+        y:{beginAtZero:true,ticks:{font:{size:10},color:'#94a3b8',callback:v=>v+'%'},grid:{color:'#e2e8f0'}},
+        x:{ticks:{font:{size:11},color:'#475569'},grid:{display:false}}
+      },
+      animation:{duration:400}
+    }
+  });
+}
+
+// ─── MASTER RENDER ──────────────────────────────────
+function render(){
+  renderTypeFilters();
+  renderBuNav();
+  renderKpis();
+  renderTabs();
+  renderContent();
+}
+
+render();
+</script>
+</body>
+</html>
