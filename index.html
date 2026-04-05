@@ -415,9 +415,22 @@ function renderOfNav(){
 function renderKpis(){
   const filtered=getFiltered();
   const a=calcAgg(filtered);
-  const s=SUM.find(x=>x.bu===(selBU!=="전체"?selBU:"전체")&&x.type===tf)||SUM.find(x=>x.bu==="전체"&&x.type==="합계");
-  const kpi={...a,contracts:s?s.ct:a.count,totalBeds:s?s.tb:a.beds,cumAvg:s?s.ca:0};
   const titleLabel=(selBU!=="전체"?selBU:"전체")+(selOF!=="전체"?" > "+selOF:"");
+
+  let contracts, totalBeds, cumAvg;
+  if(selOF!=="전체"){
+    // 사무소 선택 시 필터된 데이터에서 직접 계산
+    contracts=a.count;
+    totalBeds=a.beds;
+    const allWithCa=filtered.filter(x=>x.ca!=null);
+    cumAvg=allWithCa.length?allWithCa.reduce((s,x)=>s+x.ca,0)/allWithCa.length:0;
+  } else {
+    const s=SUM.find(x=>x.bu===(selBU!=="전체"?selBU:"전체")&&x.type===tf)||SUM.find(x=>x.bu==="전체"&&x.type==="합계");
+    contracts=s?s.ct:a.count;
+    totalBeds=s?s.tb:a.beds;
+    cumAvg=s?s.ca:0;
+  }
+  const kpi={...a,contracts,totalBeds,cumAvg};
 
   const marColor = kpi.mar>=40?'var(--green)':kpi.mar>=25?'var(--amber)':'var(--red)';
   const deltaHtml = kpi.delta!=null
@@ -482,6 +495,15 @@ function renderOverview(el){
       return {label:bu,...calcAgg(l)};
     }).filter(Boolean);
     subTableHtml=buildSubTable(`사업부별 현황 (${titleLabel} · ${tf})`,rows,"bu");
+  } else if(selOF!=="전체"){
+    // 사무소 선택 시: 해당 사무소 내 병원별 현황
+    const hospRows=filtered.map(x=>{
+      const wM=x.r[7]!=null?[x]:[];
+      const wF=x.r[6]!=null?[x]:[];
+      return {label:x.h,count:1,beds:x.b,active:wM.length,mar:x.r[7],feb:x.r[6],
+        delta:(x.r[7]!=null&&x.r[6]!=null)?x.r[7]-x.r[6]:null};
+    });
+    subTableHtml=buildSubTable(`병원별 현황 (${titleLabel} · ${tf})`,hospRows,"hosp");
   } else {
     let l=HOSP.filter(x=>x.bu===selBU);
     if(tf==="기존형") l=l.filter(x=>x.t==="기존");
@@ -532,7 +554,7 @@ function renderOverview(el){
           </div>
         </div>
         ${buCmpHtml}
-        <div class="card ${selBU!=='전체'?'grid-span':''}">
+        <div class="card ${selBU!=='전체'||selOF!=='전체'?'grid-span':''}">
           <div class="rank-grid-mobile" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
             <div>
               <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--green)">▲ Top 10 (3월)</div>
@@ -559,7 +581,7 @@ function buildSubTable(title,rows,labelKey){
     <div style="padding:0 0 10px;font-size:13px;font-weight:700;border-bottom:1px solid var(--blight)">${title}</div>
     <table>
       <thead><tr>
-        <th class="left" style="font-size:10px">${labelKey==="bu"?"사업부":"사무소"}</th>
+        <th class="left" style="font-size:10px">${labelKey==="bu"?"사업부":labelKey==="hosp"?"병원명":"사무소"}</th>
         <th style="font-size:10px">처수</th><th style="font-size:10px">병상</th><th style="font-size:10px">가동</th>
         <th style="font-size:10px">3월</th><th style="font-size:10px">2월</th><th style="font-size:10px">변동</th><th style="font-size:10px">등급</th>
       </tr></thead>
@@ -689,30 +711,52 @@ function renderHospitals(el){
 
 // ─── CHART BUILDERS ─────────────────────────────────
 function buildTrendChart(canvasId, height, mini){
-  const bu=selBU!=="전체"?selBU:"전체";
   const labels=MS;
   const datasets=[];
 
-  ["합계","기존형","튜닝형"].forEach(type=>{
-    const s=SUM.find(x=>x.bu===bu&&x.type===type);
-    if(!s) return;
-    const color=type==="합계"?"#2563eb":type==="기존형"?"#0891b2":"#7c3aed";
-    const isMain=type===tf;
-    const show=tf==="합계"||(type===tf);
-    datasets.push({
-      label:type,
-      data:s.m.map(v=>v),
-      borderColor:color,
-      backgroundColor:color+'22',
-      borderWidth: tf==="합계"?(type==="합계"?3:1.5):(isMain?3:0),
-      borderDash: tf==="합계"&&type!=="합계"?[5,3]:[],
-      pointRadius: (tf==="합계"&&type==="합계")||isMain?4:0,
-      pointBackgroundColor:color,
-      tension:0.3,
-      spanGaps:true,
-      hidden:!show&&tf!=="합계",
+  if(selOF!=="전체"){
+    // 사무소 선택: 필터된 병원 데이터에서 월별 평균 직접 계산
+    const filtered=getFiltered();
+    const typeGroups = tf==="합계"
+      ? [["합계",filtered],["기존형",filtered.filter(x=>x.t==="기존")],["튜닝형",filtered.filter(x=>x.t==="튜닝")]]
+      : [[tf,filtered]];
+
+    typeGroups.forEach(([type,list])=>{
+      if(!list.length) return;
+      const monthData=MS.map((_,i)=>{
+        const w=list.filter(x=>x.r[i]!=null);
+        return w.length?w.reduce((a,x)=>a+x.r[i],0)/w.length:null;
+      });
+      const color=type==="합계"?"#2563eb":type==="기존형"?"#0891b2":"#7c3aed";
+      const isMain=type===tf;
+      datasets.push({
+        label:type, data:monthData, borderColor:color, backgroundColor:color+'22',
+        borderWidth:tf==="합계"?(type==="합계"?3:1.5):(isMain?3:0),
+        borderDash:tf==="합계"&&type!=="합계"?[5,3]:[],
+        pointRadius:(tf==="합계"&&type==="합계")||isMain?4:0,
+        pointBackgroundColor:color, tension:0.3, spanGaps:true,
+        hidden:tf!=="합계"&&type!==tf,
+      });
     });
-  });
+  } else {
+    // 사업부 전체 또는 전체: SUM 데이터 사용
+    const bu=selBU!=="전체"?selBU:"전체";
+    ["합계","기존형","튜닝형"].forEach(type=>{
+      const s=SUM.find(x=>x.bu===bu&&x.type===type);
+      if(!s) return;
+      const color=type==="합계"?"#2563eb":type==="기존형"?"#0891b2":"#7c3aed";
+      const isMain=type===tf;
+      const show=tf==="합계"||(type===tf);
+      datasets.push({
+        label:type, data:s.m.map(v=>v), borderColor:color, backgroundColor:color+'22',
+        borderWidth:tf==="합계"?(type==="합계"?3:1.5):(isMain?3:0),
+        borderDash:tf==="합계"&&type!=="합계"?[5,3]:[],
+        pointRadius:(tf==="합계"&&type==="합계")||isMain?4:0,
+        pointBackgroundColor:color, tension:0.3, spanGaps:true,
+        hidden:!show&&tf!=="합계",
+      });
+    });
+  }
 
   const ctx=document.getElementById(canvasId);
   if(!ctx) return;
