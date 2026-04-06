@@ -181,6 +181,60 @@
     .tab-btn { padding:7px 8px; font-size:11px; }
   }
 
+  /* ─── Login Screen ─── */
+  #login-screen {
+    position:fixed; inset:0; background:#f8fafc;
+    display:flex; align-items:center; justify-content:center;
+    z-index:9999;
+  }
+  .login-box {
+    background:#fff; border:1px solid var(--border); border-radius:16px;
+    padding:40px 36px; width:100%; max-width:360px;
+    box-shadow:0 4px 24px rgba(0,0,0,.08);
+  }
+  .login-logo { font-size:10px; font-weight:700; color:var(--accent); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
+  .login-title { font-size:20px; font-weight:800; color:var(--text); margin-bottom:4px; }
+  .login-sub { font-size:11px; color:var(--mute); margin-bottom:28px; }
+  .login-label { font-size:11px; font-weight:600; color:var(--dim); margin-bottom:5px; display:block; }
+  .login-input {
+    width:100%; padding:10px 14px; border:1.5px solid var(--border);
+    border-radius:8px; font-size:13px; color:var(--text);
+    outline:none; margin-bottom:14px; transition:border-color .15s;
+    font-family:inherit;
+  }
+  .login-input:focus { border-color:var(--accent); }
+  .login-btn {
+    width:100%; padding:12px; background:var(--accent); color:#fff;
+    border:none; border-radius:8px; font-size:14px; font-weight:700;
+    cursor:pointer; margin-top:4px; transition:background .15s; font-family:inherit;
+  }
+  .login-btn:hover { background:#1d4ed8; }
+  .login-error { font-size:11px; color:var(--red); margin-top:10px; display:none; text-align:center; }
+
+  /* ─── User Badge ─── */
+  .user-badge {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:6px 12px 6px 8px; border-radius:8px;
+    background:#eff6ff; border:1px solid #bfdbfe;
+    font-size:12px; color:var(--accent);
+  }
+  .user-badge-avatar {
+    width:24px; height:24px; border-radius:6px;
+    background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:800; flex-shrink:0;
+  }
+  .user-badge-name { font-weight:700; }
+  .user-badge-role { font-size:10px; color:#60a5fa; font-weight:500; }
+  .logout-btn {
+    padding:4px 8px; border-radius:5px; font-size:10px; font-weight:600;
+    border:1px solid #bfdbfe; background:transparent; color:#93c5fd;
+    cursor:pointer; margin-left:4px; transition:all .15s; font-family:inherit;
+  }
+  .logout-btn:hover { background:#dbeafe; color:var(--accent); }
+
+  @media(max-width:400px){ .login-box{ padding:28px 20px; } }
+
   /* Touch-friendly tap targets */
   @media (pointer:coarse) {
     .bu-btn, .of-btn, .type-btn, .tab-btn { min-height:36px; display:inline-flex; align-items:center; justify-content:center; }
@@ -193,16 +247,33 @@
 </style>
 </head>
 <body>
-<div id="app">
+
+<!-- 로그인 화면 -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">Daewoong · Digital Health</div>
+    <div class="login-title">대시보드 로그인</div>
+    <div class="login-sub">thynC 사용량 비례형 현황 대시보드</div>
+    <label class="login-label">사번</label>
+    <input class="login-input" id="loginId" type="text" placeholder="사번을 입력하세요" autocomplete="username" />
+    <label class="login-label">비밀번호</label>
+    <input class="login-input" id="loginPw" type="password" placeholder="비밀번호를 입력하세요" autocomplete="current-password" />
+    <button class="login-btn" onclick="handleLogin()">로그인</button>
+    <div class="login-error" id="loginError">사번 또는 비밀번호가 올바르지 않습니다.</div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
   <!-- Header -->
   <div class="header">
     <div>
       <h1>사용량 비례형 현황 대시보드 _ 병원본부</h1>
-      <div class="header-sub">사용량 비례형만 포함 · 26년 2월 마감 기준 · S≥70% · A≥60% · B+≥50% · B≥40% · C&lt;40%</div>
+      <div class="header-sub">사용량 비례형만 포함됨 · 26년 3월 기준 · S≥70% · A≥60% · B+≥50% · B≥40% · C&lt;40%</div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+      <div id="userBadge"></div>
       <div class="type-filters" id="typeFilters"></div>
-      <a href="thynC_20260406.html" style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:7px;background:#f1f5f9;color:var(--accent);font-size:11px;font-weight:600;text-decoration:none;border:1px solid var(--border);transition:all .15s" onmouseover="this.style.background='#e0e7ff'" onmouseout="this.style.background='#f1f5f9'">
+      <a href="thynC_대시보드_20260406.html" style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:7px;background:#f1f5f9;color:var(--accent);font-size:11px;font-weight:600;text-decoration:none;border:1px solid var(--border);transition:all .15s" onmouseover="this.style.background='#e0e7ff'" onmouseout="this.style.background='#f1f5f9'">
         <span style="font-size:13px">📊</span> 월차별 가동률 현황 보기 →
       </a>
     </div>
@@ -855,6 +926,98 @@ function buildBuCmpChart(canvasId){
     }
   });
 }
+
+// ─── LOGIN ───────────────────────────────────────────
+const ACCOUNTS = [
+  { id: "1970433", pw: "1970433", name: "노희창", role: "사업부장" },
+  { id: "2000140", pw: "2000140", name: "양기호", role: "소장" },
+  { id: "2020053", pw: "2020053", name: "나영호", role: "소장" },
+  { id: "2030263", pw: "2030263", name: "정철훈", role: "소장" },
+  { id: "2030273", pw: "2030273", name: "유창득", role: "본부장" },
+  { id: "2050027", pw: "2050027", name: "민병기", role: "소장" },
+  { id: "2050337", pw: "2050337", name: "김도영", role: "소장" },
+  { id: "2050422", pw: "2050422", name: "임병옥", role: "사업부장" },
+  { id: "2060122", pw: "2060122", name: "하재필", role: "소장" },
+  { id: "2060127", pw: "2060127", name: "김상훈", role: "소장" },
+  { id: "2060399", pw: "2060399", name: "최진규", role: "소장" },
+  { id: "2060474", pw: "2060474", name: "박용식", role: "소장" },
+  { id: "2070021", pw: "2070021", name: "정지영", role: "소장" },
+  { id: "2070212", pw: "2070212", name: "노회원", role: "소장" },
+  { id: "2070319", pw: "2070319", name: "박효빈", role: "소장" },
+  { id: "2070342", pw: "2070342", name: "이창형", role: "소장" },
+  { id: "2080254", pw: "2080254", name: "이석우", role: "소장" },
+  { id: "2090056", pw: "2090056", name: "이창훈", role: "소장" },
+  { id: "2090315", pw: "2090315", name: "정창민", role: "소장" },
+  { id: "2090364", pw: "2090364", name: "최선일", role: "소장" },
+  { id: "2100064", pw: "2100064", name: "정진명", role: "사업부장" },
+  { id: "2100074", pw: "2100074", name: "남궁민", role: "사업부장" },
+  { id: "2100282", pw: "2100282", name: "박광영", role: "소장" },
+  { id: "2100381", pw: "2100381", name: "이준원", role: "소장대행" },
+  { id: "2110093", pw: "2110093", name: "권봉기", role: "소장" },
+  { id: "2110321", pw: "2110321", name: "박천광", role: "소장" },
+  { id: "2120221", pw: "2120221", name: "한재우", role: "소장" },
+  { id: "2130064", pw: "2130064", name: "이동호", role: "소장" },
+  { id: "2130318", pw: "2130318", name: "황선준", role: "소장" },
+  { id: "2160122", pw: "2160122", name: "이주강", role: "소장" },
+  { id: "2160189", pw: "2160189", name: "김병준", role: "소장" },
+  { id: "2170309", pw: "2170309", name: "이윤석", role: "소장" },
+  { id: "2180349", pw: "2180349", name: "김선덕", role: "소장" },
+  { id: "2600891", pw: "2600891", name: "이재빈", role: "소장" },
+];
+
+function renderUserBadge(){
+  const name = sessionStorage.getItem("dh2_name");
+  const role = sessionStorage.getItem("dh2_role");
+  const el = document.getElementById("userBadge");
+  if(!el || !name) return;
+  const initial = name.charAt(0);
+  el.innerHTML = `
+    <div class="user-badge">
+      <div class="user-badge-avatar">${initial}</div>
+      <div>
+        <div class="user-badge-name">${name} <span class="user-badge-role">${role}</span></div>
+      </div>
+      <button class="logout-btn" onclick="handleLogout()">로그아웃</button>
+    </div>`;
+}
+
+function handleLogin(){
+  const id = document.getElementById("loginId").value.trim();
+  const pw = document.getElementById("loginPw").value;
+  const matched = ACCOUNTS.find(a => a.id === id && a.pw === pw);
+  if(matched){
+    sessionStorage.setItem("dh2_auth","true");
+    sessionStorage.setItem("dh2_name", matched.name);
+    sessionStorage.setItem("dh2_role", matched.role);
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    document.getElementById("loginError").style.display = "none";
+    renderUserBadge();
+  } else {
+    document.getElementById("loginError").style.display = "block";
+  }
+}
+
+function handleLogout(){
+  sessionStorage.clear();
+  document.getElementById("app").style.display = "none";
+  document.getElementById("login-screen").style.display = "flex";
+  document.getElementById("loginId").value = "";
+  document.getElementById("loginPw").value = "";
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  ["loginId","loginPw"].forEach(id=>{
+    document.getElementById(id)?.addEventListener("keydown", e=>{
+      if(e.key==="Enter") handleLogin();
+    });
+  });
+  if(sessionStorage.getItem("dh2_auth")==="true"){
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    renderUserBadge();
+  }
+});
 
 // ─── MASTER RENDER ──────────────────────────────────
 function render(){
